@@ -1,0 +1,1 @@
+# Routes for media search
