@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from app.routes import email, calendar, tasks, media, assistant, user, alexa
 
-app = FastAPI(title="AI Assistant Backend")
+app = FastAPI(title="Jarvis-AI Backend")
 
 # Include routes
 app.include_router(email.router, prefix="/api/email", tags=["Email"])

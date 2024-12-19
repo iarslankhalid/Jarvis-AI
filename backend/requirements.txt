@@ -2,3 +2,5 @@
 fastapi[all]
 pandas
 openai
+python-dotenv
+todoist_api_python
