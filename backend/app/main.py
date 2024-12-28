@@ -1,9 +1,19 @@
 # FastAPI entry point
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.routes import email, calendar, tasks, media, assistant, user, alexa
 
 app = FastAPI(title="Jarvis-AI Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:5500"],  # Adjust the frontend URL as needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include routes
 app.include_router(email.router, prefix="/api/email", tags=["Email"])

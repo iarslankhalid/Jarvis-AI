@@ -1,4 +1,5 @@
 import os
+from openai import OpenAI
 import requests
 from dotenv import load_dotenv
 from ..schemas.task_schema import TaskModel
@@ -69,3 +70,25 @@ def update_task_in_todoist(task_id:str, task: TaskModel):
 
     except requests.exceptions.RequestException as error:
         return {"error": f"Failed to add task: {error}"}
+
+
+# Helper function to interact with OpenAI
+
+
+def call_openai_for_task(transcription: str, key):
+    """
+    Calls OpenAI API to generate task details from transcription.
+    """
+    client = OpenAI(api_key=key)
+
+    prompt = f"Generate a JSON payload in the following schema for the given transcription:\n{TaskModel.schema_json()}\nTranscription: {transcription}, if there is no task, return content value as -1"
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are an assistant that generates task details for Todoist."},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    
+    return response.choices[0].text
+

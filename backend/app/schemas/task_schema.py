@@ -22,3 +22,6 @@ class TaskModel(BaseModel):
     assignee_id: Optional[str] = None
     duration: Optional[int] = None
     duration_unit: Optional[str] = None
+    
+class TranscriptionModel(BaseModel):
+    transcription: str
