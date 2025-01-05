@@ -1,10 +1,12 @@
 import os
+import json
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from todoist_api_python.api import TodoistAPI
 from ..schemas.task_schema import TaskModel, TranscriptionModel
-from ..services.task_service import add_task_to_todoist, call_openai_for_task
+from ..services.task_service import add_task_to_todoist, call_openai_for_task, update_task_in_todoist
 
 # Load environment variables
 load_dotenv()
@@ -46,7 +48,7 @@ def add_audio_task(transcription_data: TranscriptionModel):
 
         # Send transcription to OpenAI for task generation
         openai_response = call_openai_for_task(transcription, OPENAI_API_KEY)
-        task_payload = TaskModel(**openai_response)
+        task_payload = TaskModel(**json.loads(openai_response))
 
         # Add the task to Todoist
         created_task = add_task_to_todoist(task_payload)
@@ -70,7 +72,7 @@ def list_tasks():
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.put("/{task_id}")
+@router.put("/edit/{task_id}")
 def edit_task(task_id: str, updated_task: TaskModel):
     """
     Endpoint to update an existing task.
