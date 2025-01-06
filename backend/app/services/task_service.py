@@ -52,7 +52,7 @@ def update_task_in_todoist(task_id:str, task: TaskModel):
     """
 
     try:
-        task = api.add_task(
+        task = api.update_task(
             task_id=task_id,
             content=task.content,
             description=task.description,
