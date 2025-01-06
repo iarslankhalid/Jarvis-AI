@@ -46,34 +46,36 @@ def add_task_to_todoist(task: TaskModel):
         return {"error": f"Failed to add task: {error}"}
 
 
-def update_task_in_todoist(task_id:str, task: TaskModel):
+def update_task_in_todoist(task_id: str, task: TaskModel):
     """
-    updated the exsisting task
+    Updates an existing task in Todoist.
     """
-
     try:
-        task = api.update_task(
-            task_id=task_id,
-            content=task.content,
-            description=task.description,
-            project_id=task.project_id,
-            section_id=task.section_id,
-            parent_id=task.parent_id,
-            order=task.order,
-            labels=task.labels,
-            priority=task.priority,
-            due_string=task.due_string,
-            due_date=task.due_date,
-            due_lang=task.due_lang,
-            assignee_id=task.assignee_id,
-            duration=task.duration,
-            duration_unit=task.duration_unit)
-        return task
+        # Prepare the payload dynamically based on non-empty fields
+        payload = {
+            "content": task.content,  # Task content (optional but recommended)
+            "description": task.description,  # Task description
+            "labels": task.labels,  # Task labels
+            "priority": task.priority,  # Priority level
+            "due_string": task.due_string if not task.due_date and not task.due_datetime else None,
+            "due_date": task.due_date if not task.due_string and not task.due_datetime else None,
+            "due_datetime": task.due_datetime if not task.due_date and not task.due_string else None,
+            "due_lang": task.due_lang,  # Language code for due_string
+            "assignee_id": task.assignee_id,  # Assignee ID
+            "duration": task.duration if task.duration_unit else None,
+            "duration_unit": task.duration_unit if task.duration else None,
+        }
+
+        # Filter out None values to avoid sending invalid parameters
+        payload = {key: value for key, value in payload.items() if value is not None}
+
+        # Call the API with the prepared payload
+        updated_task = api.update_task(task_id=task_id, **payload)
+
+        return updated_task
 
     except requests.exceptions.RequestException as error:
-        return {"error": f"Failed to add task: {error}"}
-
-
+        return {"error": f"Failed to update task: {error}"}
 # Helper function to interact with OpenAI
 
 
