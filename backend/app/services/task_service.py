@@ -76,27 +76,27 @@ def update_task_in_todoist(task_id: str, task: TaskModel):
 
     except requests.exceptions.RequestException as error:
         return {"error": f"Failed to update task: {error}"}
+    
+
+
+
+
+
 # Helper function to interact with OpenAI
-
-
-
 def call_openai_for_task(transcription: str, key: str) -> str:
     """
     Calls OpenAI API to generate structured task details from transcription.
     Returns a JSON string conforming to the TaskModel schema or an error message.
     """
-    import openai
+    
+    from openai import OpenAI
     import json
+    # Initialize OpenAI client
+    client = OpenAI(api_key=key)
 
-    openai.api_key = key
-
-    # Retrieve the schema dynamically from TaskModel
     task_model_schema = TaskModel.model_json_schema()
-
-    # Format the schema as a string for inclusion in the prompt
     schema_string = json.dumps(task_model_schema, indent=4)
 
-    # Define the role and prompt
     role_prompt = f"""
     You are an assistant for generating structured task details for the Todoist API.
 
@@ -118,15 +118,13 @@ def call_openai_for_task(transcription: str, key: str) -> str:
     )
 
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": role_prompt},
                 {"role": "user", "content": prompt},
             ],
         )
-
-        # Extract the JSON content directly
         message_content = response.choices[0].message.content.strip()
 
         # Parse JSON string into a Python dict
@@ -136,9 +134,9 @@ def call_openai_for_task(transcription: str, key: str) -> str:
         if "content" not in payload or payload["content"] == "-1":
             return json.dumps({"error": "Invalid or unrelated transcription."})
 
-        return json.dumps(payload)  # Serialize dict into a JSON string
+        return json.dumps(payload)
 
     except json.JSONDecodeError as e:
-        return json.dumps({"error": f"Failed to parse JSON: {str(e)}"})  # Serialize error response
+        return json.dumps({"error": f"Failed to parse JSON: {str(e)}"})
     except Exception as e:
-        return json.dumps({"error": f"Error during API call: {str(e)}"})  # Serialize error response
+        return json.dumps({"error": f"Error during API call: {str(e)}"})
