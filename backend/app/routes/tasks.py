@@ -48,7 +48,18 @@ def add_audio_task(transcription_data: TranscriptionModel):
 
         # Send transcription to OpenAI for task generation
         openai_response = call_openai_for_task(transcription, OPENAI_API_KEY)
-        task_payload = TaskModel(**json.loads(openai_response))
+        response_data = json.loads(openai_response)  # Parse the response
+
+        # Check for errors in the OpenAI response
+        if "error" in response_data:
+            raise HTTPException(status_code=400, detail=response_data["error"])
+
+        # Ensure the response has a valid `content` field
+        if "content" not in response_data or response_data["content"] == "-1":
+            raise HTTPException(status_code=400, detail="Invalid or unrelated transcription.")
+
+        # Create a TaskModel from the validated response
+        task_payload = TaskModel(**response_data)
 
         # Add the task to Todoist
         created_task = add_task_to_todoist(task_payload)
@@ -58,7 +69,6 @@ def add_audio_task(transcription_data: TranscriptionModel):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 # --------------------------------- GET FUNCTIONS -------------------------------------
 @router.get("/list")
