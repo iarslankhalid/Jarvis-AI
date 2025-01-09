@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+/.vscode
+/.idea
+
 #API keys
 API Keys.txt
 
@@ -127,11 +130,15 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.vscode/
+.idea/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+create_project_structure.py
 
 # Spyder project settings
 .spyderproject
