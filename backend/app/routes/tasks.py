@@ -21,13 +21,10 @@ if not OPENAI_API_KEY:
 api = TodoistAPI(TODOIST_API_KEY)
 router = APIRouter()
 
-
 # --------------------------------- POST FUNCTIONS -------------------------------------
 @router.post("/add")
 def add_task(request: TaskModel):
-    """
-    Endpoint to add a new task.
-    """
+    """Endpoint to add a new task."""
     try:
         created_task = add_task_to_todoist(request)
         return {
@@ -39,29 +36,19 @@ def add_task(request: TaskModel):
 
 @router.post("/voice")
 def add_audio_task(transcription_data: TranscriptionModel):
-    """
-    Endpoint to process transcription and add a task.
-    """
+    """Endpoint to process transcription and add a task."""
     try:
-        # Extract the transcription
         transcription = transcription_data.transcription
-
-        # Send transcription to OpenAI for task generation
         openai_response = call_openai_for_task(transcription, OPENAI_API_KEY)
-        response_data = json.loads(openai_response)  # Parse the response
+        response_data = json.loads(openai_response)
 
-        # Check for errors in the OpenAI response
         if "error" in response_data:
             raise HTTPException(status_code=400, detail=response_data["error"])
 
-        # Ensure the response has a valid `content` field
         if "content" not in response_data or response_data["content"] == "-1":
             raise HTTPException(status_code=400, detail="Invalid or unrelated transcription.")
 
-        # Create a TaskModel from the validated response
         task_payload = TaskModel(**response_data)
-
-        # Add the task to Todoist
         created_task = add_task_to_todoist(task_payload)
         return {
             "message": f"Task '{task_payload.content}' added successfully to Todoist.",
@@ -73,20 +60,35 @@ def add_audio_task(transcription_data: TranscriptionModel):
 # --------------------------------- GET FUNCTIONS -------------------------------------
 @router.get("/list")
 def list_tasks():
-    """
-    Endpoint to retrieve all tasks from Todoist.
-    """
+    """Endpoint to retrieve all tasks from Todoist."""
     try:
         task_list = api.get_tasks()
         return task_list
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/completed-tasks")
+def completed_tasks():
+    """Endpoint to retrieve all completed tasks from Todoist."""
+    try:
+        # Using curl command as reference for Todoist API
+        import requests
+
+        url = "https://api.todoist.com/sync/v9/completed/get_all"
+        headers = {"Authorization": f"Bearer {TODOIST_API_KEY}"}
+
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail="Failed to fetch completed tasks.")
+        
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --------------------------------- PUT FUNCTIONS -------------------------------------
 @router.put("/edit/{task_id}")
 def edit_task(task_id: str, updated_task: TaskModel):
-    """
-    Endpoint to update an existing task.
-    """
+    """Endpoint to update an existing task."""
     try:
         updated_task_result = update_task_in_todoist(task_id, updated_task)
         return {
@@ -96,24 +98,9 @@ def edit_task(task_id: str, updated_task: TaskModel):
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/{task_id}")
-def delete_task(task_id: str):
-    """
-    Endpoint to delete an existing task.
-    """
-    try:
-        api.delete_task(task_id)
-        return {
-            "message": f"Task '{task_id}' deleted successfully."
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 @router.put("/{task_id}/close")
 def close_task(task_id: str):
-    """
-    Endpoint to close an existing task.
-    """
+    """Endpoint to close an existing task."""
     try:
         api.close_task(task_id)
         return {"message": f"Successfully closed task #{task_id}."}
@@ -122,11 +109,19 @@ def close_task(task_id: str):
 
 @router.put("/{task_id}/reopen")
 def reopen_task(task_id: str):
-    """
-    Endpoint to reopen an existing task.
-    """
+    """Endpoint to reopen an existing task."""
     try:
         api.reopen_task(task_id)
         return {"message": f"Successfully reopened task #{task_id}."}
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --------------------------------- DELETE FUNCTIONS -------------------------------------
+@router.delete("/{task_id}")
+def delete_task(task_id: str):
+    """Endpoint to delete an existing task."""
+    try:
+        api.delete_task(task_id)
+        return {"message": f"Task '{task_id}' deleted successfully."}
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
