@@ -1,29 +1,105 @@
-"use client"; // Ensure the component is treated as client-side
-import { FaMicrophone, FaPaperPlane } from "react-icons/fa"; // Import necessary icons
-import { useState } from "react";
+"use client";
+import { FaMicrophone, FaPaperPlane } from "react-icons/fa";
+import { useState, useEffect, useRef } from "react";
+import { v4 as uuidv4 } from "uuid";
 
 export default function VoiceAssistantPage() {
-  const [messages, setMessages] = useState([]); // State to hold the messages
-  const [message, setMessage] = useState(""); // State to hold the input value
+  const [messages, setMessages] = useState([]); // Chat messages
+  const [message, setMessage] = useState(""); // Input message
+  const sessionId = uuidv4(); // This will generate a valid 
+  const [isListening, setIsListening] = useState(false); // Microphone state
+  const [loading, setLoading] = useState(false); // Loading indicator
+  const recognitionRef = useRef(null); // Ref to hold the recognition instance
 
-  const handleSend = () => {
-    if (message.trim()) {
-      // Add user message to the chat
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { sender: "user", text: message },
-      ]);
+  // Initialize the session and speech recognition
+  useEffect(() => {
+    // Set a unique session ID
+    // setSessionId(uuidv4());
 
-      // Simulate a chatbot response
-      setTimeout(() => {
-        setMessages((prevMessages) => [
-          ...prevMessages,
-          { sender: "bot", text: `Jarvis says: \"I received your message: ${message}\"` },
-        ]);
-      }, 1000);
+    // Check if speech recognition is supported
+    if ("webkitSpeechRecognition" in window) {
+      const SpeechRecognition = window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
 
-      setMessage(""); // Clear the input field
+      // Define event handlers
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setMessage(transcript); // Update input field
+        handleSend(transcript); // Send the message automatically
+      };
+
+      recognition.onerror = (error) => {
+        console.error("Speech recognition error:", error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false); // Stop listening when recognition ends
+      };
+
+      recognitionRef.current = recognition; // Save instance in ref
+    } else {
+      alert("Speech recognition is not supported in your browser.");
     }
+  }, []);
+
+  const handleSend = async (inputMessage) => {
+    const text = (inputMessage || message || "").trim();
+    if (!text) return;
+  
+    // Add user message to the chat
+    setMessages((prev) => [...prev, { sender: "user", text }]);
+    setLoading(true); // Show loading state
+  
+    try {
+      const response = await fetch("http://127.0.0.1:5000/api/assistant/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, prompt: text }),
+      });
+  
+      if (!response.ok) {
+        // Log the response to understand the 422 error better
+        const errorData = await response.json();
+        console.error("API error:", errorData);
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+  
+      const data = await response.json();
+      const botMessage =
+        typeof data.response === "string"
+          ? data.response
+          : JSON.stringify(data.response); // Handle object response
+  
+      // Add bot response to the chat
+      setMessages((prev) => [...prev, { sender: "bot", text: botMessage }]);
+    } catch (error) {
+      console.error("Failed to get response from API:", error);
+      setMessages((prev) => [
+        ...prev,
+        { sender: "bot", text: "Error: Unable to fetch response from API" },
+      ]);
+    } finally {
+      setLoading(false); // Hide loading state
+      setMessage(""); // Clear input
+    }
+  };
+  
+
+  const toggleMicrophone = () => {
+    const recognition = recognitionRef.current; // Get the recognition instance
+    if (!recognition) return;
+
+    if (isListening) {
+      recognition.stop(); // Stop speech recognition
+    } else {
+      recognition.start(); // Start speech recognition
+    }
+
+    setIsListening(!isListening); // Toggle microphone state
   };
 
   const handleKeyPress = (e) => {
@@ -34,9 +110,9 @@ export default function VoiceAssistantPage() {
 
   return (
     <div className="flex flex-col items-center bg-black h-screen text-light">
-      {/* Chat Section */}
-      <section className="w-max bg-black flex-grow px-6 flex flex-col justify-between">
-        <div className="w-[900px] mx-auto px-8 py-4 bg-gray-900 rounded-lg shadow-lg flex flex-col h-full">
+    <section className="flex justify-center w-[800] h-screen bg-black m-5">
+      
+      <div className="w-[900px] px-8 py-4 bg-gray-900 rounded-lg shadow-lg flex flex-col">
           <h2 className="text-center text-neonPink text-4xl font-extrabold glowing-text mb-4">
             JARVIS Chat
           </h2>
@@ -59,6 +135,9 @@ export default function VoiceAssistantPage() {
                 </div>
               </div>
             ))}
+            {loading && (
+              <div className="text-center text-gray-500">Loading...</div>
+            )}
           </div>
 
           {/* Input Section */}
@@ -70,18 +149,19 @@ export default function VoiceAssistantPage() {
                 className="flex-1 px-4 py-2 text-white bg-gray-800 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-neonPink"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={handleKeyPress} // Handle Enter key
+                onKeyDown={handleKeyPress}
               />
-              {/* Microphone Icon */}
               <button
-                className="flex items-center justify-center w-12 h-12 text-neonBlue hover:text-neonPink transition-colors"
+                onClick={toggleMicrophone}
+                className={`flex items-center justify-center w-12 h-12 ${
+                  isListening ? "text-red-500" : "text-neonBlue"
+                } hover:text-neonPink transition-colors`}
                 aria-label="Activate voice input"
               >
                 <FaMicrophone size={24} />
               </button>
-              {/* Send Icon */}
               <button
-                onClick={handleSend}
+                onClick={() => handleSend()}
                 className="flex items-center justify-center w-12 h-12 text-neonBlue hover:text-neonPink transition-colors"
                 aria-label="Send message"
               >

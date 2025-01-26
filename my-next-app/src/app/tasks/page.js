@@ -143,47 +143,115 @@ export default function TasksPage() {
 
 
   // Mark task as completed
+  // const handleCompleteTask = async (taskId) => {
+  //   console.log("Task ID:", taskId);
+  //   try {
+  //     // API call to mark the task as completed
+  //     const response = await fetch(`http://127.0.0.1:5000/api/tasks/${taskId}/close`, {
+  //       method: "PUT",
+  //       headers: { "Content-Type": "application/json" },
+  //     });
+
+  //     console.log(response);
+  //     if (response.ok) {
+  //       // Find and remove the task from tasks
+  //       setTasks((prevTasks) => {
+  //         const taskToComplete = prevTasks.find((task) => task.id === taskId);
+
+  //         if (!taskToComplete) {
+  //           console.error(`Task with ID ${taskId} not found.`);
+  //           return prevTasks;
+  //         }
+
+  //         // Update the completedTasks list without duplicates
+  //         setCompletedTasks((prevCompletedTasks) => {
+  //           // Check if the task is already in the list
+  //           console.log(completedTasks);
+  //           const isAlreadyCompleted = prevCompletedTasks.some((task) => task.id === taskId);
+  //           console.log(isAlreadyCompleted);
+  //           if (isAlreadyCompleted) {
+  //             console.warn(`Task with ID ${taskId} is already in the completedTasks list.`);
+  //             return prevCompletedTasks;
+  //           }
+  //           return [...prevCompletedTasks, { ...taskToComplete, completed: true }];
+  //         });
+
+  //         // Remove the task from the current task list
+  //         return prevTasks.filter((task) => task.id !== taskId);
+  //       });
+  //     } else {
+  //       console.error("Failed to complete task:", response.status);
+  //       alert("Failed to mark task as completed.");
+  //     }
+  //   } catch (error) {
+  //     console.error("Error marking task as completed:", error);
+  //   }
+  // };
+
   const handleCompleteTask = async (taskId) => {
     console.log("Task ID:", taskId);
+  
     try {
-      // API call to mark the task as completed
-      const response = await fetch(`http://127.0.0.1:5000/api/tasks/${taskId}/close`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (response.ok) {
-        // Find and remove the task from tasks
-        setTasks((prevTasks) => {
-          const taskToComplete = prevTasks.find((task) => task.id === taskId);
-
-          if (!taskToComplete) {
-            console.error(`Task with ID ${taskId} not found.`);
-            return prevTasks;
-          }
-
-          // Update the completedTasks list without duplicates
+      if (tab === "active") {
+        // API call to mark the task as completed
+        const response = await fetch(`http://127.0.0.1:5000/api/tasks/${taskId}/close`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+        });
+  
+        if (response.ok) {
+          // Move task from active to completed
+          setTasks((prevTasks) => {
+            const taskToComplete = prevTasks.find((task) => task.id === taskId);
+            if (!taskToComplete) {
+              console.error(`Task with ID ${taskId} not found in active tasks.`);
+              return prevTasks;
+            }
+  
+            setCompletedTasks((prevCompletedTasks) => [
+              ...prevCompletedTasks,
+              { ...taskToComplete, completed: true },
+            ]);
+  
+            return prevTasks.filter((task) => task.id !== taskId);
+          });
+        } else {
+          console.error("Failed to mark task as completed:", response.status);
+        }
+      } else if (tab === "completed") {
+        // API call to reopen task
+        const response = await fetch(`http://127.0.0.1:5000/api/tasks/${taskId}/reopen`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+        });
+  
+        if (response.ok) {
+          // Move task from completed to active
           setCompletedTasks((prevCompletedTasks) => {
-            // Check if the task is already in the list
-            const isAlreadyCompleted = prevCompletedTasks.some((task) => task.id === taskId);
-            if (isAlreadyCompleted) {
-              console.warn(`Task with ID ${taskId} is already in the completedTasks list.`);
+            const taskToReopen = prevCompletedTasks.find((task) => task.task_id === taskId);
+            if (!taskToReopen) {
+              console.error(`Task with ID ${taskId} not found in completed tasks.`);
               return prevCompletedTasks;
             }
-            return [...prevCompletedTasks, { ...taskToComplete, completed: true }];
+  
+            // Add reopened task to active tasks
+            setTasks((prevTasks) => [
+              ...prevTasks,
+              { ...taskToReopen, completed: false },
+            ]);
+  
+            // Remove the task from completed tasks
+            return prevCompletedTasks.filter((task) => task.task_id !== taskId);
           });
-
-          // Remove the task from the current task list
-          return prevTasks.filter((task) => task.id !== taskId);
-        });
-      } else {
-        console.error("Failed to complete task:", response.status);
-        alert("Failed to mark task as completed.");
+        } else {
+          console.error("Failed to reopen task:", response.status);
+        }
       }
     } catch (error) {
-      console.error("Error marking task as completed:", error);
+      console.error("Error updating task state:", error);
     }
   };
+  
 
 
   const handleEditClick = (task) => {
@@ -215,9 +283,9 @@ export default function TasksPage() {
             labels: labels || ["general"],
             due_date: due_date || "",
           });
-          alert(`Task '${content}' added successfully!`);
+          console.log(`Task '${content}' added successfully!`);
         } else {
-          alert("Failed to create a task. Please check your transcription.");
+          console.log("Failed to create a task. Please check your transcription.");
         }
       } else {
         console.error("API Error:", responseData.detail);
@@ -324,142 +392,133 @@ export default function TasksPage() {
         <div className="max-w-screen-lg mx-auto">
           {/* Render Tasks based on selected tab */}
           <ul className="mt-6 space-y-4">
-  {(tab === "active" ? tasks : completedTasksShow).map((task, index) => (
-    <li
-      key={index}
-      className={`bg-gray-800 p-4 rounded-xl flex items-center justify-between group shadow-md hover:shadow-lg transition-shadow ${
-        tab === "completed" && task.completed ? "bg-green-700" : ""
-      }`}
-    >
-      {/* Checkbox */}
-      <div className="flex items-center">
-      <input
-  type="checkbox"
-  checked={tab === "completed"} // Checkbox checked state depends on tab
-  onChange={() => handleCompleteTask(task.id)} // Toggle task completion
-  className={`w-6 h-6 rounded-full border-2 appearance-none 
-    ${
-      tab === "completed"
-        ? "bg-green-300 border-green-500" // Green circle for completed tab
-        : "bg-white border-gray-500" // Default for other tabs
-    } focus:outline-none  
-    checked:bg-green-500 checked:ring-2 checked:ring-green-300 
-    `}
-/>
-
-<style jsx>{`
-  input[type="checkbox"]:checked::before {
-    content: "✔"; /* Custom tick mark */
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: white;
-    font-size: 0.8rem;
-    font-weight: bold;
+  {(tab === "active" ? tasks : completedTasksShow)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // Sort by created_at (newest first)
+    .map((task, index) => (
+      <li
+        key={index}
+        className={`bg-gray-800 p-4 rounded-xl flex items-center justify-between group shadow-md hover:shadow-lg transition-shadow ${
+          tab === "completed" && task.completed ? "bg-green-700" : ""
+        }`}
+      >
+        {/* Checkbox */}
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            checked={tab === "completed"} // Checkbox checked state depends on tab
+              onChange={() =>
+    handleCompleteTask(tab === "completed" ? task.task_id : task.id)
   }
-`}</style>
+            className={`w-6 h-6 rounded-full border-2 appearance-none 
+              ${
+                tab === "completed"
+                  ? "bg-green-300 border-green-500" // Green circle for completed tab
+                  : "bg-white border-gray-500" // Default for other tabs
+              } focus:outline-none  
+              checked:bg-green-500 checked:ring-2 checked:ring-green-300 
+            `}
+          />
+        </div>
 
-      </div>
+        {/* Task Content */}
+        <div className="flex flex-col flex-1 ml-4">
+          {/* Task Title */}
+          <h3
+            className={`text-neonPink text-lg font-semibold ${
+              task.completed ? "line-through" : ""
+            } capitalize`}
+          >
+            {task.content}
+          </h3>
 
-      {/* Task Content */}
-      <div className="flex flex-col flex-1 ml-4">
-        {/* Task Title */}
-        <h3
-          className={`text-neonPink text-lg font-semibold ${
-            task.completed ? "line-through" : ""
-          } capitalize`}
-        >
-          {task.content}
-        </h3>
-
-        {/* Show only "Completed at" in the completed tab */}
-        {tab === "completed" && (
-          <p className="text-gray-400 text-sm mt-1">
-            Completed at:{" "}
-            {task.completed_at
-              ? new Date(task.completed_at).toLocaleDateString()
-              : "Unknown"}
-          </p>
-        )}
-
-        {/* Show extra details in the active tab */}
-        {tab === "active" && (
-          <>
-            {/* Created At */}
+          {/* Show only "Completed at" in the completed tab */}
+          {tab === "completed" && (
             <p className="text-gray-400 text-sm mt-1">
-              Created at:{" "}
-              {task.created_at
-                ? new Date(task.created_at).toLocaleDateString()
+              Completed at:{" "}
+              {task.completed_at
+                ? new Date(task.completed_at).toLocaleDateString()
                 : "Unknown"}
             </p>
+          )}
 
-            {/* Task Details */}
-            <div className="flex items-center mt-2 space-x-4 text-gray-400 text-sm">
-              {/* Priority */}
-              <div className="flex items-center">
-                <FaFlag className="text-yellow-500 mr-2" />
-                <span
-                  className={`px-2 py-1 rounded-full font-medium ${
-                    task.priority === 4
-                      ? "bg-red-700 text-white"
+          {/* Show extra details in the active tab */}
+          {tab === "active" && (
+            <>
+              {/* Created At */}
+              <p className="text-gray-400 text-sm mt-1">
+                Created at:{" "}
+                {task.created_at
+                  ? new Date(task.created_at).toLocaleDateString()
+                  : "Unknown"}
+              </p>
+
+              {/* Task Details */}
+              <div className="flex items-center mt-2 space-x-4 text-gray-400 text-sm">
+                {/* Priority */}
+                <div className="flex items-center">
+                  <FaFlag className="text-yellow-500 mr-2" />
+                  <span
+                    className={`px-2 py-1 rounded-full font-medium ${
+                      task.priority === 4
+                        ? "bg-red-700 text-white"
+                        : task.priority === 3
+                        ? "bg-red-500 text-white"
+                        : task.priority === 2
+                        ? "bg-yellow-500 text-black"
+                        : "bg-green-500 text-white"
+                    }`}
+                  >
+                    {task.priority === 4
+                      ? "Highest"
                       : task.priority === 3
-                      ? "bg-red-500 text-white"
+                      ? "High"
                       : task.priority === 2
-                      ? "bg-yellow-500 text-black"
-                      : "bg-green-500 text-white"
-                  }`}
-                >
-                  {task.priority === 4
-                    ? "Highest"
-                    : task.priority === 3
-                    ? "High"
-                    : task.priority === 2
-                    ? "Medium"
-                    : "Low"}
-                </span>
-              </div>
+                      ? "Medium"
+                      : "Low"}
+                  </span>
+                </div>
 
-              {/* Due Date */}
-              <div className="flex items-center">
-                <FaCalendarAlt className="text-blue-500 mr-2" />
-                {task.due?.string ? (
-                  <span>{new Date(task.due.date).toLocaleDateString()}</span>
-                ) : (
-                  "No due date"
-                )}
-              </div>
+                {/* Due Date */}
+                <div className="flex items-center">
+                  <FaCalendarAlt className="text-blue-500 mr-2" />
+                  {task.due?.string ? (
+                    <span>{new Date(task.due.date).toLocaleDateString()}</span>
+                  ) : (
+                    "No due date"
+                  )}
+                </div>
 
-              {/* Progress */}
-              <div className="flex items-center">
-                <FaTasks className="text-green-500 mr-2" />
-                <span>{task.progress || "In Progress"}</span>
+                {/* Progress */}
+                <div className="flex items-center">
+                  <FaTasks className="text-green-500 mr-2" />
+                  <span>{task.progress || "In Progress"}</span>
+                </div>
               </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Action Buttons - Only show in the active tab */}
-      {tab === "active" && (
-        <div className="flex gap-4 ml-4">
-          <button
-            onClick={() => handleEditClick(task)}
-            className="p-2 bg-yellow-600 rounded-lg hover:bg-yellow-700 transition-colors"
-          >
-            <FaEdit className="text-white" />
-          </button>
-          <button
-            onClick={() => handleDeleteTask(task.id)}
-            className="p-2 bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
-          >
-            <FaTrash className="text-white" />
-          </button>
+            </>
+          )}
         </div>
-      )}
-    </li>
-  ))}
+
+        {/* Action Buttons - Only show in the active tab */}
+        {tab === "active" && (
+          <div className="flex gap-4 ml-4">
+            <button
+              onClick={() => handleEditClick(task)}
+              className="p-2 bg-yellow-600 rounded-lg hover:bg-yellow-700 transition-colors"
+            >
+              <FaEdit className="text-white" />
+            </button>
+            <button
+              onClick={() => handleDeleteTask(task.id)}
+              className="p-2 bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <FaTrash className="text-white" />
+            </button>
+          </div>
+        )}
+      </li>
+    ))}
 </ul>
+
 
         </div>
       </section>
