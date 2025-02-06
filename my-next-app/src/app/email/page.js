@@ -223,7 +223,7 @@ const handleOpenEmail = (email) => {
       ) : (
         <div className="flex flex-col items-center justify-center">
           <p className="text-gray-400 text-lg mb-4">You are not linked to an email account.</p>
-          <button className="px-6 py-3 bg-neonBlue text-black font-bold rounded-lg hover:bg-neonPink transition">
+          <button onClick={() => handleLogin()} className="px-6 py-3 bg-neonBlue text-black font-bold rounded-lg hover:bg-neonPink transition">
             Link Your Email
           </button>
         </div>
