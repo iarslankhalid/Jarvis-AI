@@ -1,5 +1,6 @@
 import os
 import requests
+from fastapi import HTTPException
 from urllib.parse import urlencode
 from dotenv import load_dotenv
 from ..utils.file_handler import load_credentials, save_credentials
@@ -15,6 +16,7 @@ REDIRECT_URI = os.getenv("REDIRECT_URI")
 # OAuth Endpoints
 AUTHORIZATION_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
 TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+
 
 def get_login_url():
     """Generates the Microsoft login URL."""
@@ -46,23 +48,32 @@ def exchange_code_for_token(code: str):
     return token_data
 
 def refresh_access_token():
-    """Refreshes the access token using the refresh token."""
     credentials = load_credentials()
     refresh_token = credentials.get("refresh_token")
-
+    
     if not refresh_token:
-        raise Exception("No refresh token available.")
+        raise HTTPException(status_code=400, detail="Refresh token is missing.")
 
     data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
-        "refresh_token": refresh_token,
         "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "scope": "https://graph.microsoft.com/.default"
     }
-    response = requests.post(TOKEN_URL, data=data)
-    if response.status_code != 200:
-        raise Exception(f"Error refreshing token: {response.json()}")
 
-    new_token_data = response.json()
-    save_credentials(new_token_data)
-    return new_token_data
+    response = requests.post(TOKEN_URL, data=data)
+
+    print("Refresh Token Response:", response.json())  # Debugging
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=f"Failed to refresh token: {response.json()}")
+
+    token_data = response.json()
+    
+    # Store the new access token
+    credentials["access_token"] = token_data.get("access_token")
+    credentials["refresh_token"] = token_data.get("refresh_token", refresh_token)  # Use new refresh token if provided
+    save_credentials(credentials)
+
+    return token_data
