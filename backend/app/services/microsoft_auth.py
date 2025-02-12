@@ -1,9 +1,10 @@
 import os
 import requests
+import json
 from fastapi import HTTPException
 from urllib.parse import urlencode
 from dotenv import load_dotenv
-from ..utils.file_handler import load_credentials, save_credentials
+from ..utils.file_handler import save_credentials
 
 # Load environment variables
 load_dotenv()
@@ -47,33 +48,29 @@ def exchange_code_for_token(code: str):
     save_credentials(token_data)
     return token_data
 
-def refresh_access_token():
-    credentials = load_credentials()
-    refresh_token = credentials.get("refresh_token")
-    
-    if not refresh_token:
-        raise HTTPException(status_code=400, detail="Refresh token is missing.")
-
+def refresh_token_auth(refresh_token):
+    """Refreshes the OAuth access token."""
     data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
-        "grant_type": "refresh_token",
         "refresh_token": refresh_token,
-        "scope": "https://graph.microsoft.com/.default"
+        "grant_type": "refresh_token",
+        "scope": "offline_access Mail.Read Mail.Send"
     }
 
-    response = requests.post(TOKEN_URL, data=data)
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
 
-    print("Refresh Token Response:", response.json())  # Debugging
+    response = requests.post(TOKEN_URL, data=data, headers=headers)
+
+    try:
+        new_token_data = response.json()
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Failed to parse refresh token response.")
 
     if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail=f"Failed to refresh token: {response.json()}")
+        raise HTTPException(status_code=response.status_code, detail=new_token_data.get("error_description", "Unknown error"))
 
-    token_data = response.json()
-    
-    # Store the new access token
-    credentials["access_token"] = token_data.get("access_token")
-    credentials["refresh_token"] = token_data.get("refresh_token", refresh_token)  # Use new refresh token if provided
-    save_credentials(credentials)
-
-    return token_data
+    save_credentials(new_token_data)
+    return {"message": "Token refreshed", "token": new_token_data}
