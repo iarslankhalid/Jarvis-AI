@@ -1,4 +1,6 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+import os
 from ..services.microsoft_auth import get_login_url, exchange_code_for_token, refresh_token_auth
 from ..utils.file_handler import load_credentials
 
@@ -14,7 +16,8 @@ def callback(code: str):
     """Handles OAuth callback, exchanges code for a token, and stores it."""
     try:
         token_data = exchange_code_for_token(code)
-        return {"message": "Email linked successfully!", "token": token_data}
+        success_page_path = os.path.join("static", 'success.html')
+        return FileResponse(success_page_path)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

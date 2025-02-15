@@ -4,7 +4,7 @@ import json
 from fastapi import HTTPException
 from urllib.parse import urlencode
 from dotenv import load_dotenv
-from ..utils.file_handler import save_credentials
+from ..utils.file_handler import save_credentials, load_credentials
 
 # Load environment variables
 load_dotenv()
@@ -27,7 +27,7 @@ def get_login_url():
         "response_type": "code",
         "redirect_uri": REDIRECT_URI,
         "response_mode": "query",
-        "scope": "offline_access Mail.Read Mail.Send",
+        "scope": "offline_access Mail.Read Mail.Send Mail.ReadWrite",
         "prompt": "select_account",
     }
     return f"{AUTHORIZATION_URL}?{urlencode(params)}"
@@ -55,7 +55,7 @@ def refresh_token_auth(refresh_token):
         "client_secret": CLIENT_SECRET,
         "refresh_token": refresh_token,
         "grant_type": "refresh_token",
-        "scope": "offline_access Mail.Read Mail.Send"
+        "scope": "offline_access Mail.Read Mail.Send Mail.ReadWrite"
     }
 
     headers = {
@@ -73,4 +73,15 @@ def refresh_token_auth(refresh_token):
         raise HTTPException(status_code=response.status_code, detail=new_token_data.get("error_description", "Unknown error"))
 
     save_credentials(new_token_data)
-    return {"message": "Token refreshed", "token": new_token_data}
+    return new_token_data["access_token"]
+
+
+def get_access_token():
+    """Retrieves a fresh access token from stored credentials."""
+    credentials = load_credentials()
+    access_token = credentials.get("access_token")
+
+    if not access_token:
+        raise Exception("No linked account found or credentials missing.")
+
+    return access_token

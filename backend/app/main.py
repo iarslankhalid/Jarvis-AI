@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
-from app.routes import email, tasks, assistant, test, auth
+from app.routes import email, tasks, assistant, auth
 
 app = FastAPI(title="Jarvis-AI Backend")
 

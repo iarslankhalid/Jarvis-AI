@@ -2,6 +2,5 @@
 
 from pydantic import BaseModel
 
-class EmailResponse(BaseModel):
-    subject: str
-    body: str
+class EmailReplyRequest(BaseModel):
+    reply_body: str

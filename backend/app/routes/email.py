@@ -1,128 +1,115 @@
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
-import os
-import requests
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 import base64
-from ..utils.file_handler import load_credentials
-from ..services.nlp_service import extract_task_from_email
+
+from ..services.email_service import (
+    fetch_emails,
+    fetch_email_by_id,
+    mark_email_as_read,
+    fetch_attachment,
+    send_email,
+    refresh_mailbox,
+    reply_to_email
+)
+from ..services.nlp_service import extract_task_from_email, generate_ai_reply
+from ..schemas.email_schema import EmailReplyRequest
 
 router = APIRouter()
-
-GRAPH_API_URL = "https://graph.microsoft.com/v1.0/me/messages"
-SEND_MAIL_URL = "https://graph.microsoft.com/v1.0/me/sendMail"
-ATTACHMENT_DIR = "attachments"
+LAST_SCAN_TIME = "2025-02-15T04:05:25.288386+00:00"  # Tracks last email scan
 
 
 # -------------------------------
 # 🔹 Fetch Emails
 # -------------------------------
 
-@router.get("/messages")
-def get_emails():
-    """Fetches the first 50 emails from the user's inbox."""
-    credentials = load_credentials()
-    access_token = credentials.get("access_token")
+@router.get("/inbox")
+def get_emails(background_tasks: BackgroundTasks, limit: int = 50):
+    """Fetch emails and process new ones asynchronously in the background."""
+    global LAST_SCAN_TIME
 
-    if not access_token:
-        raise HTTPException(status_code=400, detail="No linked account found.")
+    refresh_output = refresh_mailbox(LAST_SCAN_TIME)
+    new_email_count = refresh_output["count"]
+    
+    LAST_SCAN_TIME = refresh_output["last_scan"]
 
-    headers = {"Authorization": f"Bearer {access_token}"}
-    response = requests.get(GRAPH_API_URL, headers=headers)
+    # Process new emails in the background
+    if refresh_output["new_emails"]:
+        background_tasks.add_task(extract_task_from_email, LAST_SCAN_TIME)
 
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail="Failed to fetch emails.")
+    return fetch_emails(limit)
 
-    emails = response.json().get("value", [])[:50]
-    return {"emails": emails}
 
-@router.get("/{email_id}")
-def get_email_by_id(email_id: str):
+# -------------------------------
+# 🔹 Fetch Email by ID
+# -------------------------------
+
+@router.get("/inbox/{email_id}")
+def get_email_by_id(background_tasks: BackgroundTasks, email_id: str):
     """Fetches a specific email by ID."""
-    credentials = load_credentials()
-    access_token = credentials.get("access_token")
+    email_data = fetch_email_by_id(email_id)
 
-    if not access_token:
-        raise HTTPException(status_code=400, detail="No linked account found.")
+    if not email_data["isRead"]:
+        background_tasks.add_task(mark_email_as_read, email_id)
 
-    headers = {"Authorization": f"Bearer {access_token}"}
-    email_response = requests.get(f"{GRAPH_API_URL}/{email_id}", headers=headers)
+    return email_data
 
-    if email_response.status_code != 200:
-        raise HTTPException(status_code=email_response.status_code, detail="Failed to fetch email.")
-
-    return email_response.json()
 
 # -------------------------------
-# 🔹 Handling Attachments
+# 🔹 Generate AI Reply to Email
 # -------------------------------
 
-@router.get("/{email_id}/attachment/{attachment_id}")
+@router.get("/inbox/{email_id}/generate-reply")
+def generate_ai_reply_route(email_id: str):
+    """Generates an AI-powered reply for an email."""
+    email_data = fetch_email_by_id(email_id)
+    ai_reply = generate_ai_reply(email_data)
+    return {"email_id": email_id, "generated_reply": ai_reply}
+
+
+# -------------------------------
+# 🔹 Reply to an Email
+# -------------------------------
+
+@router.post("/inbox/{email_id}/reply")
+def reply_to_email_route(email_id: str, request: EmailReplyRequest):
+    """Replies to a specific email."""
+    return reply_to_email(email_id, request.reply_body)
+
+
+# -------------------------------
+# 🔹 Stream Email Attachments
+# -------------------------------
+
+@router.get("/inbox/{email_id}/attachments/{attachment_id}")
 def download_attachment(email_id: str, attachment_id: str):
-    """Downloads an attachment from an email."""
-    credentials = load_credentials()
-    access_token = credentials.get("access_token")
-
-    if not access_token:
-        raise HTTPException(status_code=400, detail="No linked account found.")
-
-    headers = {"Authorization": f"Bearer {access_token}"}
-    attachment_response = requests.get(f"{GRAPH_API_URL}/{email_id}/attachments/{attachment_id}", headers=headers)
-
-    if attachment_response.status_code != 200:
-        raise HTTPException(status_code=attachment_response.status_code, detail="Failed to fetch attachment.")
-
-    attachment_data = attachment_response.json()
+    """Streams an email attachment."""
+    
+    attachment_data = fetch_attachment(email_id, attachment_id)
     file_name = attachment_data["name"]
-    content_bytes = attachment_data["contentBytes"]
+    content_bytes = base64.b64decode(attachment_data["contentBytes"])
+    content_type = attachment_data["contentType"]
 
-    os.makedirs(ATTACHMENT_DIR, exist_ok=True)
-    file_path = os.path.join(ATTACHMENT_DIR, file_name)
+    return StreamingResponse(
+        iter([content_bytes]),
+        media_type=content_type,
+        headers={"Content-Disposition": f"attachment; filename={file_name}"}
+    )
 
-    with open(file_path, "wb") as file:
-        file.write(base64.b64decode(content_bytes))
-
-    return FileResponse(file_path, filename=file_name, media_type=attachment_data["contentType"])
-
-# -------------------------------
-# 🔹 Task Extraction from Email
-# -------------------------------
-
-@router.post("/{email_id}/extract-task")
-def extract_task_from_email_api(email_id: str):
-    """Extracts tasks from an email using AI."""
-    email_data = get_email_by_id(email_id)
-    task = extract_task_from_email(email_data["subject"], email_data["body"])
-    return {"email_id": email_id, "task": task}
 
 # -------------------------------
-# 🔹 Sending Emails
+# 🔹 Send Emails
 # -------------------------------
 
 @router.post("/send")
-def send_email(to: str, subject: str, body: str):
+def send_email_route(to: str, subject: str, body: str):
     """Sends an email via Microsoft Graph API."""
-    credentials = load_credentials()
-    access_token = credentials.get("access_token")
+    return send_email(to, subject, body)
 
-    if not access_token:
-        raise HTTPException(status_code=400, detail="No linked account found.")
 
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
+# -------------------------------
+# 🔹 Refresh Mailbox
+# -------------------------------
 
-    email_payload = {
-        "message": {
-            "subject": subject,
-            "body": {"contentType": "HTML", "content": body},
-            "toRecipients": [{"emailAddress": {"address": to}}]
-        }
-    }
-
-    response = requests.post(SEND_MAIL_URL, json=email_payload, headers=headers)
-
-    if response.status_code != 202:
-        raise HTTPException(status_code=response.status_code, detail="Failed to send email.")
-
-    return {"message": "Email sent successfully."}
+@router.get("/refresh-mailbox")
+def refresh_mailbox_api():
+    return refresh_mailbox(LAST_SCAN_TIME)
