@@ -1,0 +1,6 @@
+openai
+fastapi[all]
+requests
+base64
+python-dotenv
+todoist_api_python
