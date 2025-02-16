@@ -109,7 +109,7 @@ def extract_task_from_email(email_subject: str, email_body: str, key: str = OPEN
         payload = json.loads(message_content)
 
         # Ensure the `label` field is always set to "Email"
-        payload["label"] = "Email"
+        payload["labels"] = ["Email"]
 
         # Validate if task extraction was successful
         if "content" not in payload or payload["content"] == "-1":

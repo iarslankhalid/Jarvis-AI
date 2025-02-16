@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 import base64
+from cachetools import TTLCache
+import time
 
 from ..services.email_service import (
     fetch_emails,
@@ -13,31 +15,29 @@ from ..services.email_service import (
 )
 from ..services.nlp_service import extract_task_from_email, generate_ai_reply
 from ..schemas.email_schema import EmailReplyRequest
+from .tasks import add_task
 
 router = APIRouter()
-LAST_SCAN_TIME = "2025-02-15T04:05:25.288386+00:00"  # Tracks last email scan
-
 
 # -------------------------------
 # 🔹 Fetch Emails
 # -------------------------------
 
+# Cache for storing the last 50 emails (expires in 2 minutes)
+EMAIL_CACHE = TTLCache(maxsize=1, ttl=300)
+
 @router.get("/inbox")
 def get_emails(background_tasks: BackgroundTasks, limit: int = 50):
     """Fetch emails and process new ones asynchronously in the background."""
-    global LAST_SCAN_TIME
+    refresh_output = refresh_mailbox(background_tasks)
 
-    refresh_output = refresh_mailbox(LAST_SCAN_TIME)
-    new_email_count = refresh_output["count"]
-    
-    LAST_SCAN_TIME = refresh_output["last_scan"]
-
-    # Process new emails in the background
     if refresh_output["new_emails"]:
-        background_tasks.add_task(extract_task_from_email, LAST_SCAN_TIME)
+        emails = fetch_emails(limit)
+        EMAIL_CACHE["latest_emails"] = emails
+    else:
+        emails = EMAIL_CACHE.get("latest_emails", fetch_emails(limit))
 
-    return fetch_emails(limit)
-
+    return emails
 
 # -------------------------------
 # 🔹 Fetch Email by ID
@@ -111,5 +111,7 @@ def send_email_route(to: str, subject: str, body: str):
 # -------------------------------
 
 @router.get("/refresh-mailbox")
-def refresh_mailbox_api():
-    return refresh_mailbox(LAST_SCAN_TIME)
+def refresh_mailbox_api(background_tasks: BackgroundTasks):
+    return refresh_mailbox(background_tasks)
+
+

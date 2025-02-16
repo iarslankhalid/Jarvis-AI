@@ -1,12 +1,19 @@
 import requests
-from fastapi import HTTPException
+from fastapi import HTTPException, BackgroundTasks
 from datetime import datetime, timezone
+import json
 
 from ..utils.file_handler import load_credentials, save_credentials
+from ..schemas.task_schema import TaskModel
+
 from .microsoft_auth import refresh_token_auth
+from .nlp_service import extract_task_from_email
+from .task_service import add_task_to_todoist
 
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0/me/messages"
 SEND_MAIL_URL = "https://graph.microsoft.com/v1.0/me/sendMail"
+
+LAST_SCAN_TIME = "2025-02-16T02:59:17.663457+00:00"  # Tracks last email scan
 
 
 # -------------------------------
@@ -31,11 +38,16 @@ def retry_on_401(request_func, url, **kwargs):
         print("🔄 Refreshing token due to 401 Unauthorized error...")
         new_access_token = refresh_token_auth(refresh_token)
 
+        # ✅ Save new token to prevent reusing the expired one
+        credentials["access_token"] = new_access_token
+        save_credentials(credentials)
+
         # Retry with new token
         kwargs["headers"]["Authorization"] = f"Bearer {new_access_token}"
         response = request_func(url, **kwargs)
 
     return response
+
 
 
 # -------------------------------
@@ -203,30 +215,54 @@ def send_email(to: str, subject: str, body: str):
 # 🔹 Refresh Mailbox
 # -------------------------------
 
-def refresh_mailbox(last_scan: str):
+def refresh_mailbox(background_tasks: BackgroundTasks):
     """Checks for new emails since the last scan."""
+    
+    global LAST_SCAN_TIME
     credentials = load_credentials()
     access_token = credentials.get("access_token")
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    current_time = datetime.now(timezone.utc).isoformat()
-
-    params = {"$filter": f"receivedDateTime gt {last_scan}", "$orderby": "receivedDateTime DESC"} if last_scan else {"$top": 1, "$orderby": "receivedDateTime DESC"}
-
+    params = {"$filter": f"receivedDateTime gt {LAST_SCAN_TIME}", "$orderby": "receivedDateTime DESC"} if LAST_SCAN_TIME else {"$top": 1, "$orderby": "receivedDateTime DESC"}
     response = retry_on_401(requests.get, GRAPH_API_URL, headers=headers, params=params)
 
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail="Failed to fetch emails.")
 
+    current_time = datetime.now(timezone.utc).isoformat()
+    LAST_SCAN_TIME = current_time
     emails = response.json().get("value", [])
-
+    
+    if bool(emails):
+        background_tasks.add_task(task_extractor, emails)
+        
     return {
         "last_scan": current_time,
         "new_emails": bool(emails),
         "count": len(emails),
     }
-    
-    
+
+# -------------------------------
+# 🔹 Process Task Extraction
+# -------------------------------
+
+def task_extractor(emails):
+    """Processes task extraction for new emails."""
+    for email in emails:
+        full_email = fetch_email_by_id(email["id"])
+        task_json = extract_task_from_email(full_email["subject"], full_email["body"])
+
+        try:
+            task = json.loads(task_json)
+        except json.JSONDecodeError:
+            print(f"❌ Error parsing AI response for email {email['id']}")
+            continue
+
+        if task.get("content") != "-1":
+            task_payload = TaskModel(**task)
+            output = add_task_to_todoist(task_payload)
+            print(output)
+
 
 # -------------------------------
 # 🔹 Reply to an Email
