@@ -6,13 +6,13 @@ from app.routes import email, tasks, assistant, auth
 app = FastAPI(title="Jarvis-AI Backend")
 
 # Add CORS middleware
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Debug print routes before registration
 print("Available routes in email router:", [route.path for route in email.router.routes])

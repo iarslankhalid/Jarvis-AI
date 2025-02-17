@@ -1,23 +1,35 @@
-import { useState } from 'react';
-import { FaMicrophone } from 'react-icons/fa'; // Import the microphone icon
-import { useRouter } from 'next/router'; // Import the Next.js router
+'use client';
+
+import { useState, useEffect } from 'react';
+import { FaMicrophone } from 'react-icons/fa';
+import { useRouter } from 'next/router';
 
 export default function Page() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false); // Track user authentication
-  const [showAssistant, setShowAssistant] = useState(false); // State to toggle the voice assistant view
-  const router = useRouter(); // Initialize the Next.js router
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
+  const [isClient, setIsClient] = useState(false); // New state to check client-side rendering
+  const router = useRouter();
+
+  useEffect(() => {
+    setIsClient(true); // Set client-side rendering flag once the component is mounted
+  }, []);
 
   const handleGetStarted = () => {
     if (isLoggedIn) {
-      setShowAssistant(true); // If logged in, show the assistant
+      setShowAssistant(true);
     } else {
-      router.push('/login'); // Redirect to the login page if not logged in
+      router.push('/login');
     }
   };
 
   const handleCloseAssistant = () => {
     setShowAssistant(false);
   };
+
+  // Only render the page when on the client side
+  if (!isClient) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col items-center bg-black min-h-screen text-light">

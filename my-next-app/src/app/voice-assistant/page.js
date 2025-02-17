@@ -187,31 +187,52 @@ export default function VoiceAssistantPage() {
   const sessionId = uuidv4();
   const recognitionRef = useRef(null);
   const synthesisRef = useRef(null);
+  const base_url = "https://jarvis-ai-b6ge.onrender.com";
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       initializeRecognition();
       synthesisRef.current = window.speechSynthesis;
     }
-  }, []);
-
+  
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Stop recognition when tab is not visible
+        if (recognitionRef.current) recognitionRef.current.stop();
+      } else {
+        // Restart recognition when tab becomes visible again
+        if (recognitionRef.current && isListening) {
+          recognitionRef.current.start();
+        }
+      }
+    };
+  
+    // Listen for visibility changes
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  
+  }, [isListening]);
+  
   // Initialize Speech Recognition
   const initializeRecognition = () => {
     if (!("webkitSpeechRecognition" in window)) {
       alert("Your browser does not support voice recognition.");
       return;
     }
-
+  
     const SpeechRecognition = window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false;
     recognition.lang = "en-US";
-
+  
     recognition.onresult = async (event) => {
       const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase();
       console.log("Heard:", transcript);
-
+  
       if (!isListening) {
         if (transcript.includes("hey jarvis")) {
           setIsListening(true);
@@ -220,37 +241,85 @@ export default function VoiceAssistantPage() {
         }
         return;
       }
-
+  
       handleSend(transcript);
     };
-
+  
     recognition.onerror = (error) => console.error("Speech recognition error:", error);
-
+  
     recognitionRef.current = recognition;
     recognition.start();
   };
+  
+  // Speak text using browser's built-in speech synthesis
+  const speakText = (text) => {
+    if (!synthesisRef.current) {
+      console.error("Speech synthesis not supported");
+      return;
+    }
+  
+    // Stop any ongoing speech
+    synthesisRef.current.cancel();
+  
+    // Create new utterance
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.volume = 1;
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.lang = "en-US";
+  
+    // Find a suitable voice
+    const voices = synthesisRef.current.getVoices();
+    utterance.voice = voices.find(voice => voice.lang === "en-US") || null;
+  
+    // Pause recognition while speaking
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+  
+    // Speak the text
+    synthesisRef.current.speak(utterance);
+  
+    // Handle speech events
+    utterance.onend = () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.start();
+      }
+    };
+  
+    utterance.onerror = (error) => {
+      console.error("Speech synthesis error:", error);
+      if (recognitionRef.current) {
+        recognitionRef.current.start();
+      }
+    };
+  };
 
-  // Send message to AI and get response
   const handleSend = async (text) => {
     if (!text.trim()) return;
-
+  
+    // Add the user's message to the conversation
     setMessages((prev) => [...prev, { sender: "user", text }]);
-
+  
     try {
-      const response = await fetch("http://127.0.0.1:5000/api/assistant/query", {
+      // Call your backend API to process the query and get a response
+      const response = await fetch(`${base_url}/api/assistant/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId, prompt: text }),
       });
-
+  
       if (!response.ok) {
         throw new Error(`HTTP error: ${response.status}`);
       }
-
+  
+      // Process the response and add the bot's reply to the conversation
       const data = await response.json();
       const botMessage = typeof data.response === "string" ? data.response : JSON.stringify(data.response);
-
+  
       setMessages((prev) => [...prev, { sender: "bot", text: botMessage }]);
+  
+      // Use text-to-speech to read the response
       speakText(botMessage);
     } catch (error) {
       console.error("Failed to get response from API:", error);
@@ -259,50 +328,7 @@ export default function VoiceAssistantPage() {
       speakText(errorMessage);
     }
   };
-
-  // Speak text using browser's built-in speech synthesis
-  const speakText = (text) => {
-    if (!synthesisRef.current) {
-      console.error("Speech synthesis not supported");
-      return;
-    }
-
-    // Stop any ongoing speech
-    synthesisRef.current.cancel();
-
-    // Create new utterance
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.volume = 1;
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.lang = "en-US";
-
-    // Find a suitable voice
-    const voices = synthesisRef.current.getVoices();
-    utterance.voice = voices.find(voice => voice.lang === "en-US") || null;
-
-    // Pause recognition while speaking
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-
-    // Speak the text
-    synthesisRef.current.speak(utterance);
-
-    // Handle speech events
-    utterance.onend = () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.start();
-      }
-    };
-
-    utterance.onerror = (error) => {
-      console.error("Speech synthesis error:", error);
-      if (recognitionRef.current) {
-        recognitionRef.current.start();
-      }
-    };
-  };
+  
 
   return (
     <div className="flex flex-col bg-black min-h-screen text-light ml-[20%]">

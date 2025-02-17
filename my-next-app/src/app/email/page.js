@@ -119,12 +119,15 @@ export default function EmailInbox() {
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [isComposing, setIsComposing] = useState(false);
   const [aiReply, setAiReply] = useState(""); // AI Reply store karne ke liye
+  const [userReply, setUserReply] = useState(""); // Editable reply input
+
+  const base_url = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 
   useEffect(() => {
     async function checkLinkedAccount() {
       try {
-        const res = await fetch('http://127.0.0.1:5000/api/email/messages');
+        const res = await fetch(`${base_url}/api/email/inbox`);
         if (res.ok) {
           const data = await res.json();
           console.log(data);
@@ -144,11 +147,11 @@ export default function EmailInbox() {
 
   const handleLogin = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:5000/api/email/login");
+      const res = await fetch(`${base_url}/api/auth/login`);
       const data = await res.json();
       console.log("Received data:", data);
       if (data.redirect_url) {
-        window.location.href = data.redirect_url;
+        window.open(data.redirect_url, '_blank');
       } else {
         console.error("No redirect URL received.");
       }
@@ -159,9 +162,10 @@ export default function EmailInbox() {
 
   const handleOpenEmail = async (email) => {
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/email/${email.id}`);
+      const res = await fetch(`${base_url}/api/email/inbox/${email.id}`);
       if (res.ok) {
         const emailData = await res.json();
+        console.log(emailData);
         setSelectedEmail(emailData); // Store detailed email data in state
         console.log(emailData);
         setEmails((prevEmails) =>
@@ -187,29 +191,30 @@ export default function EmailInbox() {
     }
 
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/email/${id}/generate-reply`, {
-        method: "POST",
+      const response = await fetch(`${base_url}/api/email/inbox/${id}/generate-reply`, {
+        method: "GET",
         headers: { "Content-Type": "application/json" },
       });
 
       if (!response.ok) throw new Error("Failed to generate AI reply");
 
       const data = await response.json();
-      setAiReply(data.suggested_reply || "No reply generated.");
+      
+      setAiReply(data.generated_reply || "No reply generated.");
     } catch (error) {
       console.error("Error:", error);
       alert("Error: " + error.message);
     }
   };
 
-  const handleSendReply = () => {
-    alert("Reply Sent: " + aiReply);
-    setAiReply(""); // Reply send hone ke baad clear karna
-  };
+  // const handleSendReply = () => {
+  //   alert("Reply Sent: " + aiReply);
+  //   setAiReply(""); // Reply send hone ke baad clear karna
+  // };
 
   const handleDownloadAttachment = async (attachmentId) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/email/attachments/${attachmentId}`);
+      const response = await fetch(`${base_url}/api/email/attachments/${attachmentId}`);
       if (!response.ok) throw new Error("Failed to download attachment");
   
       const blob = await response.blob();
@@ -236,6 +241,57 @@ export default function EmailInbox() {
   
 
 
+  /////
+  const handleGenerateAIReply = async () => {
+    if (!selectedEmail) {
+      alert("Select an email first!");
+      return;
+    }
+  
+    try {
+      const response = await fetch(`${base_url}/api/email/inbox/${selectedEmail.id}/generate-reply`);
+      if (!response.ok) throw new Error("Failed to generate AI reply");
+  
+      const data = await response.json();
+      
+      // Remove HTML tags and extract plain text
+      const plainTextReply = data.generated_reply.replace(/<\/?[^>]+(>|$)/g, "");
+  
+      setAiReply(plainTextReply || "No reply generated.");
+      setUserReply(plainTextReply || ""); // Set editable reply
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Error generating AI reply.");
+    }
+  };
+  
+
+  const handleSendReply = async () => {
+    if (!userReply.trim()) {
+      alert("Reply cannot be empty!");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${base_url}/api/email/inbox/${selectedEmail.id}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reply_body: userReply }),
+      });
+
+      if (!response.ok) throw new Error("Failed to send reply");
+
+      alert("Reply sent successfully!");
+      setAiReply("");
+      setUserReply("");
+      
+    } catch (error) {
+      console.error("Error sending reply:", error);
+      alert("Error sending reply.");
+    }
+  };
+
+
   return (
     <div className="flex flex-col bg-black min-h-screen text-light ml-[20%] p-6">
       <header className="text-center py-10 w-full max-w-3xl">
@@ -251,99 +307,127 @@ export default function EmailInbox() {
 
           {/* Show Email Detail if an Email is Selected */}
           {selectedEmail ? (
-            <div className="p-6 bg-gray-900 rounded-lg">
-              <button
-                onClick={() => {
-                  setSelectedEmail(null);  // Inbox wapas le jane ke liye
-                  setAiReply("");          // AI reply ko completely remove karne ke liye
-                }}
-                className="mb-4 px-4 py-2 bg-gray-700 text-white rounded-lg"
-              >
-                ⬅ Back to Inbox
-              </button>
-              <h2 className="text-neonPink text-3xl font-bold my-2">
-                {selectedEmail.subject}
-              </h2>
-              <div className="flex justify-between items-center mt-10">
-                <p className="text-gray-400">
-                  <span className="text-white font-semibold">{selectedEmail.sender}</span> {"<"}{selectedEmail.sender_email}{">"}
-                </p>
-                <div className="flex justify-between items-center mt-10">
-                {selectedEmail.hasAttachments && (
-                    <FaPaperclip className="w-4 h-4 text-gray-500 mx-2" />
-                  )}
-                  <p className="text-gray-500 text-sm">{selectedEmail.receivedDateTime}</p>
-                </div>
-              </div>
+  <div className="p-6 bg-gray-900 rounded-lg">
+    <button
+      onClick={() => {
+        setSelectedEmail(null);
+        setAiReply("");  
+      }}
+      className="mb-4 px-4 py-2 bg-gray-700 text-white rounded-lg" 
+    >
+      ⬅ Back to Inbox
+    </button>
 
-              <hr className="my-4 border-gray-600" />
-              <p className="text-gray-200">{parseHtmlToText(selectedEmail.body)}</p>
-              {/* <hr className="my-4 border-gray-600" /> */}
-              <div className="flex justify-between items-center mt-10">
-  {selectedEmail.hasAttachments && selectedEmail.attachments?.length > 0 && (
-    <div className="mt-4 p-4 bg-gray-300 rounded-lg w-full">
-      <h3 className="text-gray-700 font-bold mb-2">Attachments:</h3>
-      <ul>
-        {selectedEmail.attachments.map((attachment, index) => (
-          <li
-            key={index}
-            className="flex items-center justify-between p-3 rounded-lg shadow-md hover:bg-gray-200 transition"
-          >
-            <div>
-              <p className="text-gray-900 font-semibold">{attachment.name}</p>
-              <p className="text-gray-500 text-sm">
-                {attachment.contentType} - {formatFileSize(attachment.size)}
-              </p>
-            </div>
-            <a
-              href={`data:${attachment.contentType};base64,${attachment.contentBytes}`}
-              download={attachment.name}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-700 transition"
-            >
-              Download
-            </a>
-          </li>
-        ))}
-      </ul>
+    <h2 className="text-neonPink text-3xl font-bold my-2">
+      {selectedEmail.subject}
+    </h2>
+
+    <div className="flex justify-between items-center mt-10">
+      <p className="text-gray-400">
+        <span className="text-white font-semibold">
+          {selectedEmail?.sender?.name}
+        </span> {"<"}{selectedEmail?.sender?.email}{">"}
+      </p>
+      <div className="flex items-center">
+        {selectedEmail.hasAttachments && (
+          <FaPaperclip className="w-4 h-4 text-gray-500 mx-2" />
+        )}
+       <p className="text-gray-500 text-sm">
+  {new Date(selectedEmail.date).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+  })}
+</p>
+
+      </div>
     </div>
-  )}
-</div>
-                {/* Buttons at Bottom */}
-            <div className="mt-6 flex">
-              <button
-                // onClick={() => handleDeleteEmail(selectedEmail.id)}
-                className="px-6 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-700 transition w-auto"
+
+    <hr className="my-4 border-gray-600" />
+    
+    {/* Email Body Rendering */}
+    <div className="text-gray-200" dangerouslySetInnerHTML={{ __html: selectedEmail.body }} />
+
+    {/* Attachments */}
+    {selectedEmail.attachments?.length > 0 && (
+      <div className="mt-4 p-4 bg-gray-300 rounded-lg w-full">
+        <h3 className="text-gray-700 font-bold mb-2">Attachments:</h3>
+        <ul>
+          {selectedEmail.attachments.map((attachment, index) => (
+            <li
+              key={index}
+              className="flex items-center justify-between p-3 rounded-lg shadow-md hover:bg-gray-200 transition"
+            >
+              <div>
+                <p className="text-gray-900 font-semibold">{attachment.name}</p>
+                <p className="text-gray-500 text-sm">
+                  {attachment.contentType} - {formatFileSize(attachment.size)}
+                </p>
+              </div>
+              <a
+                href={`data:${attachment.contentType};base64,${attachment.contentBytes}`}
+                download={attachment.name}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-700 transition"
               >
-                Delete Email
-              </button>
-              <button
-                 onClick={()=> handleAIReply(selectedEmail.id)}
-                className="px-6 py-3 bg-neonBlue text-black font-bold rounded-lg hover:bg-neonPink transition w-auto ml-4"
-              >
-                Reply with AI
-              </button>
-              
-            </div>
+                Download
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    {/* Buttons at Bottom */}
+    <div className="mt-6 flex">
+      {/* <button
+        className="px-6 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-700 transition w-auto"
+      >
+        Delete Email
+      </button> */}
+      {/* AI Reply Section */}
+      <div className="mt-6">
+            <button
+              onClick={handleGenerateAIReply}
+              className="px-4 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-700 transition"
+            >
+              Generate AI Reply
+            </button>
 
             {aiReply && (
-  <div className="mt-6 p-4 bg-gray-800 rounded-lg text-white">
-    <h3 className="text-lg font-bold text-neonPink">AI Suggested Reply:</h3>
-    <p className="mt-2 text-gray-300">{aiReply}</p>
-    <button 
-      onClick={handleSendReply} 
-      className="mt-4 px-6 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-700 transition"
-    >
-      Send Reply
-    </button>
+              <div className="mt-4 w-full">
+                <h3 className="text-neonBlue font-bold">Edit Reply</h3>
+                <textarea
+                  value={userReply}
+                  onChange={(e) => setUserReply(e.target.value)}
+                  className="w-[900px] p-2 bg-gray-800 text-white rounded-lg mt-2"
+                  rows={8}
+                />
+                {/* <button
+                  onClick={handleSendReply}
+                  className="mt-4 px-4 py-2 bg-green-500 text-white font-bold rounded-lg hover:bg-green-700 transition"
+                >
+                  Send Reply
+                </button> */}
+              </div>
+            )}
+          </div>
+    </div>
+
+    {/* AI Reply Box */}
+    {aiReply && (
+      <div className="mt-6 p-4 bg-gray-800 rounded-lg text-white">
+        <h3 className="text-lg font-bold text-neonPink">AI Suggested Reply:</h3>
+        <p className="mt-2 text-gray-300">{aiReply}</p>
+        <button 
+          onClick={handleSendReply} 
+          className="mt-4 px-6 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-700 transition"
+        >
+          Send Reply
+        </button>
+      </div>
+    )}
   </div>
-)}
-
-            
-          
-
-
-            </div>
-          ) : (
+) 
+ : (
             // Show Email List when No Email is Selected
             <div>
               {/* <div className="flex items-center justify-between pb-4 border-b">
@@ -354,32 +438,42 @@ export default function EmailInbox() {
                   className="border p-2 rounded-md w-full md:w-1/3"
                 />
               </div> */}
-              <ul className="mt-4">
-                {emails.length > 0 ? (
-                  emails.map((email) => (
-                    <li
-                      key={email.id}
-                      onClick={() => handleOpenEmail(email)}
-                      className="flex flex-wrap md:flex-nowrap items-center justify-between p-3 border-b border-opacity-50 hover:bg-blue-100 hover:text-blue-900 cursor-pointer"style={{ borderColor: 'rgba(57, 229, 241, 0.27)' }}
-                    >
-                      <div className="w-full md:w-1/4 font-bold truncate">
-                        {email.sender_email}
-                      </div>
-                      <div className="w-full md:w-1/2 flex items-center gap-2">
-                        <p className="font-semibold">{email.subject}</p>
-                        {email.hasAttachments && (
-                          <FaPaperclip className="w-4 h-4 text-gray-500" />
-                        )}
-                      </div>
-                      <p className="w-full md:w-auto text-sm text-gray-600 text-right">
-                        {email.receivedDateTime}
-                      </p>
-                    </li>
-                  ))
-                ) : (
-                  <p className="text-center py-4">No emails found.</p>
-                )}
-              </ul>
+            <ul className="mt-4">
+  {emails.length > 0 ? (
+    emails.map((email) => (
+      <li
+        key={email.id}
+        onClick={() => handleOpenEmail(email)}
+        className={`flex flex-wrap md:flex-nowrap items-center justify-between p-3 border-b border-opacity-50 cursor-pointer 
+          ${
+            email.isRead
+              ? "bg-gray-800 text-gray-400" // Read emails (lighter color)
+              : "flex flex-wrap md:flex-nowrap items-center justify-between p-3 border-b border-opacity-50 hover:bg-blue-100 hover:text-blue-900 cursor-pointer"  // Unread emails (highlight on hover)
+          }`}
+        style={{ borderColor: "rgba(57, 229, 241, 0.27)" }}
+      >
+        <div className="w-full md:w-1/4 font-bold truncate">
+          {email.from.name}
+        </div>
+        <div className="w-full md:w-1/2 flex items-center gap-2">
+          <p className="font-semibold">{email.subject}</p>
+          {email.hasAttachments && (
+            <FaPaperclip className="w-4 h-4 text-gray-500" />
+          )}
+        </div>
+        <p className="w-full md:w-auto text-sm text-gray-600 text-right">
+          {new Date(email.date).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+          })}
+        </p>
+      </li>
+    ))
+  ) : (
+    <p className="text-center py-4">No emails found.</p>
+  )}
+</ul>
+
             </div>
           )}
         </section>

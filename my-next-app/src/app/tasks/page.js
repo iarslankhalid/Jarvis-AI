@@ -13,15 +13,18 @@ export default function TasksPage() {
   const [completedTasks, setCompletedTasks] = useState([]); // Completed tasks
   const [completedTasksShow, setCompletedTasksShow] = useState([]); // Completed tasks
   const [tab, setTab] = useState("active");
+  const base_url = "https://jarvis-ai-b6ge.onrender.com";
+
   // Fetch tasks from FastAPI
   // Fetch tasks based on the current tab
   useEffect(() => {
     // Define a single fetch function to manage both active and completed tasks
+    console.log(base_url);
     const fetchTasksData = async () => {
       const url =
         tab === "active"
-          ? "http://127.0.0.1:5000/api/tasks/list" // Active tasks
-          : "http://127.0.0.1:5000/api/tasks/completed-tasks"; // Completed tasks (updated URL)
+          ? `${base_url}/api/tasks/list` // Active tasks
+          : `${base_url}/api/tasks/completed-tasks`; // Completed tasks (updated URL)
 
       try {
         const response = await fetch(url);
@@ -51,7 +54,7 @@ export default function TasksPage() {
 
     if (newTask.content) {
       try {
-        const response = await fetch("http://127.0.0.1:5000/api/tasks/add", {
+        const response = await fetch( `${base_url}api/tasks/add`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(newTask),
@@ -81,7 +84,7 @@ export default function TasksPage() {
   // Delete a task
   const handleDeleteTask = async (id) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/tasks/${id}`, {  // Use backticks for template literal
+      const response = await fetch(`${base_url}api/tasks/${id}`, {  // Use backticks for template literal
         method: "DELETE",
       });
 
@@ -105,7 +108,7 @@ export default function TasksPage() {
         const taskId = editingTask.id;
 
         // Use backticks for string interpolation
-        const response = await fetch(`http://127.0.0.1:5000/api/tasks/edit/${taskId}`, {
+        const response = await fetch(`${base_url}api/tasks/edit/${taskId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -147,7 +150,7 @@ export default function TasksPage() {
   //   console.log("Task ID:", taskId);
   //   try {
   //     // API call to mark the task as completed
-  //     const response = await fetch(`http://127.0.0.1:5000/api/tasks/${taskId}/close`, {
+  //     const response = await fetch(`${base_url}api/tasks/${taskId}/close`, {
   //       method: "PUT",
   //       headers: { "Content-Type": "application/json" },
   //     });
@@ -194,7 +197,7 @@ export default function TasksPage() {
     try {
       if (tab === "active") {
         // API call to mark the task as completed
-        const response = await fetch(`http://127.0.0.1:5000/api/tasks/${taskId}/close`, {
+        const response = await fetch(`${base_url}api/tasks/${taskId}/close`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
         });
@@ -220,7 +223,7 @@ export default function TasksPage() {
         }
       } else if (tab === "completed") {
         // API call to reopen task
-        const response = await fetch(`http://127.0.0.1:5000/api/tasks/${taskId}/reopen`, {
+        const response = await fetch(`${base_url}api/tasks/${taskId}/reopen`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
         });
@@ -264,7 +267,7 @@ export default function TasksPage() {
    // Add a new task (voice)
    const handleAddVoiceTask = async (transcription) => {
     try {
-      const response = await fetch("http://127.0.0.1:5000/api/tasks/voice", {
+      const response = await fetch(`${base_url}api/tasks/voice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transcription }),
@@ -283,7 +286,7 @@ export default function TasksPage() {
             labels: labels || ["general"],
             due_date: due_date || "",
           });
-          console.log(`Task '${content}' added successfully!`);
+          // console.log(`Task '${content}' added successfully!`);
         } else {
           console.log("Failed to create a task. Please check your transcription.");
         }
