@@ -14,6 +14,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Debug print routes before registration
+print("Available routes in email router:", [route.path for route in email.router.routes])
+
 # Include routes
 app.include_router(email.router, prefix="/api/email", tags=["Email"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])

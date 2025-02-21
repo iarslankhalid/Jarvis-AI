@@ -30,7 +30,7 @@ export default function Sidebar() {
           </li>
 
           {/* Calendar */}
-          <li>
+          {/* <li>
             <Link
               href="/calendar"
               className="flex items-center space-x-3 text-neonPink font-bold hover:text-neonBlue transition-transform transform hover:scale-110 hover:shadow-neon"
@@ -51,7 +51,7 @@ export default function Sidebar() {
               </svg>
               <span>Calendar</span>
             </Link>
-          </li>
+          </li> */}
 
           {/* Tasks */}
           <li>
