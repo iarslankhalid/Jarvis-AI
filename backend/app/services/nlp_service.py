@@ -111,10 +111,6 @@ def extract_task_from_email(email_subject: str, email_body: str, key: str = OPEN
         # Ensure the `label` field is always set to "Email"
         payload["labels"] = ["Email"]
 
-        # Validate if task extraction was successful
-        if "content" not in payload or payload["content"] == "-1":
-            return json.dumps({"error": "No task found in the email."})
-
         return json.dumps(payload)
 
     except json.JSONDecodeError as e:

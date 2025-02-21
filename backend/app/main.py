@@ -21,6 +21,10 @@ app.include_router(assistant.router, prefix="/api/assistant", tags=["Assistant"]
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 
 
+@app.get("/")
+def home():
+    return {"message": "Welcome to Jarvis AI backend."}
+
 # Debug print all routes after registration
 @app.get("/debug/routes")
 async def debug_routes():

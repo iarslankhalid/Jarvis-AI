@@ -3,7 +3,7 @@ from fastapi import HTTPException, BackgroundTasks
 from datetime import datetime, timezone
 import json
 
-from ..utils.file_handler import load_credentials, save_credentials
+from ..utils.file_handler import load_credentials, save_credentials, load_last_scan_time, save_last_scan_time
 from ..schemas.task_schema import TaskModel
 
 from .microsoft_auth import refresh_token_auth
@@ -218,29 +218,37 @@ def send_email(to: str, subject: str, body: str):
 def refresh_mailbox(background_tasks: BackgroundTasks):
     """Checks for new emails since the last scan."""
     
-    global LAST_SCAN_TIME
+    last_scan_time = load_last_scan_time()  # Load last scan time dynamically
     credentials = load_credentials()
     access_token = credentials.get("access_token")
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    params = {"$filter": f"receivedDateTime gt {LAST_SCAN_TIME}", "$orderby": "receivedDateTime DESC"} if LAST_SCAN_TIME else {"$top": 1, "$orderby": "receivedDateTime DESC"}
+    
+    # Use last scan time if available, otherwise fetch the latest email
+    params = {
+        "$filter": f"receivedDateTime gt {last_scan_time}",
+        "$orderby": "receivedDateTime DESC"
+    } if last_scan_time else {"$top": 1, "$orderby": "receivedDateTime DESC"}
+    
     response = retry_on_401(requests.get, GRAPH_API_URL, headers=headers, params=params)
 
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail="Failed to fetch emails.")
 
-    current_time = datetime.now(timezone.utc).isoformat()
-    LAST_SCAN_TIME = current_time
     emails = response.json().get("value", [])
-    
-    if bool(emails):
+
+    if emails and last_scan_time:
         background_tasks.add_task(task_extractor, emails)
         
+    current_time = datetime.now(timezone.utc).isoformat()
+    save_last_scan_time()
+
     return {
         "last_scan": current_time,
         "new_emails": bool(emails),
         "count": len(emails),
     }
+    
 
 # -------------------------------
 # 🔹 Process Task Extraction
